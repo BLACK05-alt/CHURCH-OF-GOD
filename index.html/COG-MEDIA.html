@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>COG San Juan | Media Library</title>
+  
+  <link rel="stylesheet" href="COG-SHARED.css">
+</head>
+<body data-site-page="media">
+  <header>
+    <div class="container header-row">
+      <div class="brand">
+        <img class="brand-logo" src="logo.jpg" alt="COG San Juan logo">
+        <span>COG San Juan<small>Gingoog City Media Library</small></span>
+      </div>
+      <nav class="site-page-nav" aria-label="Main navigation">
+        <a href="COG.HTML">Home</a>
+        <a href="BIBLE.HTML">Bible</a>
+        <a href="ACTIVITIES.HTML">Activities</a>
+        <a href="SCHEDULE.HTML">Schedule</a>
+        <a href="CONTACT.HTML">Visit</a>
+        <a href="COG-MEDIA.html" aria-current="page">Media</a>
+        <a href="MEMBERS.HTML">Members</a>
+      </nav>
+      <div class="header-actions">
+        <label for="mediaUpload" class="button">📎 Upload Media or PPT</label>
+        <input class="upload-input" type="file" id="mediaUpload" accept="image/*,video/*,.ppt,.pptx,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation" multiple>
+      </div>
+    </div>
+  </header>
+
+  <main class="container">
+    <div class="intro">
+      <span class="eyebrow">Church media</span>
+      <h1>Pictures and Videos</h1>
+      <p>Every uploaded picture and video is collected here in its own section.</p>
+    </div>
+
+    <section class="media-section" aria-labelledby="picturesHeading">
+      <div class="section-heading">
+        <h2 id="picturesHeading">Pictures</h2>
+        <span class="count" id="pictureCount">0 items</span>
+      </div>
+      <div class="media-grid" id="pictureGrid"></div>
+    </section>
+
+    <section class="media-section" aria-labelledby="videosHeading">
+      <div class="section-heading">
+        <h2 id="videosHeading">Videos</h2>
+        <span class="count" id="videoCount">0 items</span>
+      </div>
+      <div class="media-grid" id="videoGrid"></div>
+    </section>
+
+    <section class="media-section" aria-labelledby="attachmentsHeading">
+      <div class="section-heading">
+        <h2 id="attachmentsHeading">Attachments</h2>
+        <span class="count" id="attachmentCount">0 items</span>
+      </div>
+      <div class="media-grid" id="attachmentGrid"></div>
+    </section>
+  </main>
+
+  <div class="media-viewer hidden" id="mediaViewer" role="dialog" aria-modal="true" aria-label="Media preview">
+    <div class="media-viewer-content">
+      <button type="button" class="media-viewer-close" id="mediaViewerClose" aria-label="Close preview">×</button>
+      <div id="mediaViewerContent"></div>
+      <p class="media-viewer-name" id="mediaViewerName"></p>
+      <div class="media-viewer-actions">
+        <a class="button" id="mediaViewerDownload" download>Download</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="floating-clock" aria-live="polite">
+    <strong id="floatingClockTime">--:--:--</strong>
+    <span id="floatingClockDate">Loading time...</span>
+  </div>
+
+  <script>
+    function updateFloatingClock() {
+      const now = new Date();
+      const time = document.getElementById('floatingClockTime');
+      const date = document.getElementById('floatingClockDate');
+      if (time) time.textContent = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      if (date) date.textContent = now.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+    }
+    updateFloatingClock();
+    setInterval(updateFloatingClock, 1000);
+
+    const mediaUpload = document.getElementById('mediaUpload');
+    const mediaViewer = document.getElementById('mediaViewer');
+    const mediaViewerContent = document.getElementById('mediaViewerContent');
+    const mediaViewerName = document.getElementById('mediaViewerName');
+    const mediaViewerClose = document.getElementById('mediaViewerClose');
+    const mediaViewerDownload = document.getElementById('mediaViewerDownload');
+    let activeViewerUrl = null;
+    const databasePromise = new Promise((resolve, reject) => {
+      const request = indexedDB.open('cog_media_library', 1);
+      request.onupgradeneeded = () => {
+        request.result.createObjectStore('media', { keyPath: 'id', autoIncrement: true });
+      };
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+
+    function saveMediaFile(file) {
+      return databasePromise.then(database => new Promise((resolve, reject) => {
+        const transaction = database.transaction('media', 'readwrite');
+        transaction.objectStore('media').add({
+          name: file.name,
+          type: file.type,
+          size: file.size,
+          uploadedAt: new Date().toISOString(),
+          file
+        });
+        transaction.oncomplete = resolve;
+        transaction.onerror = () => reject(transaction.error);
+      }));
+    }
+
+    function getAllMedia() {
+      return databasePromise.then(database => new Promise((resolve, reject) => {
+        const request = database.transaction('media', 'readonly').objectStore('media').getAll();
+        request.onsuccess = () => resolve(request.result || []);
+        request.onerror = () => reject(request.error);
+      }));
+    }
+
+    function deleteMedia(id) {
+      return databasePromise.then(database => new Promise((resolve, reject) => {
+        const transaction = database.transaction('media', 'readwrite');
+        transaction.objectStore('media').delete(id);
+        transaction.oncomplete = resolve;
+        transaction.onerror = () => reject(transaction.error);
+      }));
+    }
+
+    function renderEmpty(grid, message) {
+      grid.innerHTML = '';
+      const empty = document.createElement('p');
+      empty.className = 'empty';
+      empty.textContent = message;
+      grid.appendChild(empty);
+    }
+
+    function closeMediaViewer() {
+      mediaViewer?.classList.add('hidden');
+      if (mediaViewerContent) mediaViewerContent.innerHTML = '';
+      if (activeViewerUrl) {
+        URL.revokeObjectURL(activeViewerUrl);
+        activeViewerUrl = null;
+      }
+      if (mediaViewerDownload) mediaViewerDownload.removeAttribute('href');
+    }
+
+    function downloadMedia(item) {
+      const downloadUrl = URL.createObjectURL(item.file);
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = item.name;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
+    }
+
+    function isPresentation(item) {
+      return item.type === 'application/vnd.ms-powerpoint'
+        || item.type === 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+        || /\.(ppt|pptx)$/i.test(item.name);
+    }
+
+    function openMediaViewer(item) {
+      closeMediaViewer();
+      activeViewerUrl = URL.createObjectURL(item.file);
+      const media = document.createElement(item.type.startsWith('video/') ? 'video' : 'img');
+      media.src = activeViewerUrl;
+      media.alt = item.name;
+      if (item.type.startsWith('video/')) {
+        media.controls = true;
+        media.autoplay = true;
+        media.playsInline = true;
+      }
+      mediaViewerContent.appendChild(media);
+      mediaViewerName.textContent = item.name;
+      mediaViewerDownload.href = activeViewerUrl;
+      mediaViewerDownload.download = item.name;
+      mediaViewer.classList.remove('hidden');
+    }
+
+    function renderCollection(items, grid, countElement, kind) {
+      countElement.textContent = `${items.length} ${items.length === 1 ? 'item' : 'items'}`;
+      if (!items.length) {
+        renderEmpty(grid, `No ${kind} have been uploaded yet.`);
+        return;
+      }
+
+      grid.innerHTML = '';
+      items.sort((first, second) => new Date(second.uploadedAt) - new Date(first.uploadedAt));
+      items.forEach(item => {
+        const card = document.createElement('article');
+        card.className = 'media-card';
+        let media;
+        if (isPresentation(item)) {
+          media = document.createElement('div');
+          media.className = 'attachment-preview';
+          media.innerHTML = '<div aria-hidden="true">📊<small>PRESENTATION</small></div>';
+        } else {
+          media = document.createElement(item.type.startsWith('video/') ? 'video' : 'img');
+          const mediaUrl = URL.createObjectURL(item.file);
+          media.src = mediaUrl;
+          media.setAttribute('aria-label', item.name);
+          media.addEventListener('click', () => openMediaViewer(item));
+          if (item.type.startsWith('video/')) {
+            media.controls = true;
+            media.preload = 'metadata';
+            media.playsInline = true;
+          }
+        }
+
+        const info = document.createElement('div');
+        info.className = 'media-info';
+        const name = document.createElement('p');
+        name.className = 'media-name';
+        name.textContent = item.name;
+        name.title = item.name;
+        const date = document.createElement('p');
+        date.className = 'media-date';
+        date.textContent = new Date(item.uploadedAt).toLocaleString();
+        const actions = document.createElement('div');
+        actions.className = 'media-actions';
+        const downloadButton = document.createElement('button');
+        downloadButton.type = 'button';
+        downloadButton.className = 'button download-button';
+        downloadButton.textContent = 'Download';
+        downloadButton.addEventListener('click', () => downloadMedia(item));
+        const deleteButton = document.createElement('button');
+        deleteButton.type = 'button';
+        deleteButton.className = 'button delete-button';
+        deleteButton.textContent = 'Remove';
+        deleteButton.addEventListener('click', async () => {
+          await deleteMedia(item.id);
+          loadMedia();
+        });
+
+        actions.append(downloadButton, deleteButton);
+        info.append(name, date, actions);
+        card.append(media, info);
+        grid.appendChild(card);
+      });
+    }
+
+    async function loadMedia() {
+      try {
+        const media = await getAllMedia();
+        renderCollection(media.filter(item => item.type.startsWith('image/')), document.getElementById('pictureGrid'), document.getElementById('pictureCount'), 'pictures');
+        renderCollection(media.filter(item => item.type.startsWith('video/')), document.getElementById('videoGrid'), document.getElementById('videoCount'), 'videos');
+        renderCollection(media.filter(isPresentation), document.getElementById('attachmentGrid'), document.getElementById('attachmentCount'), 'attachments');
+      } catch {
+        renderEmpty(document.getElementById('pictureGrid'), 'The media library is not available in this browser.');
+        renderEmpty(document.getElementById('videoGrid'), 'The media library is not available in this browser.');
+        renderEmpty(document.getElementById('attachmentGrid'), 'The media library is not available in this browser.');
+      }
+    }
+
+    mediaUpload?.addEventListener('change', async () => {
+      const files = Array.from(mediaUpload.files || []);
+      if (!files.length) return;
+
+      try {
+        await Promise.all(files.map(saveMediaFile));
+        await loadMedia();
+      } catch {
+        alert('The selected files could not be added to the media library.');
+      }
+      mediaUpload.value = '';
+    });
+
+    mediaViewerClose?.addEventListener('click', closeMediaViewer);
+    mediaViewer?.addEventListener('click', event => {
+      if (event.target === mediaViewer) closeMediaViewer();
+    });
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Escape') closeMediaViewer();
+    });
+
+    loadMedia();
+  </script>
+  <script src="COG-SHARED.js"></script>
+</body>
+</html>

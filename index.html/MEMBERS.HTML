@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<meta name="description" content="COG San Juan church member directory.">
+	<meta name="theme-color" content="#0d243b">
+	<title>COG San Juan | Members</title>
+	
+  <link rel="stylesheet" href="COG-SHARED.css">
+</head>
+<body data-site-page="members">
+	<header>
+		<div class="container header-row">
+			<a class="brand" href="COG.HTML" aria-label="Back to COG San Juan home">
+				<img class="brand-mark" src="logo.jpg" alt="COG San Juan logo">
+				<span>COG San Juan<small>Gingoog City member directory</small></span>
+			</a>
+			<nav class="site-page-nav" aria-label="Main navigation">
+				<a href="COG.HTML">Home</a>
+				<a href="BIBLE.HTML">Bible</a>
+				<a href="ACTIVITIES.HTML">Activities</a>
+				<a href="SCHEDULE.HTML">Schedule</a>
+				<a href="CONTACT.HTML">Visit</a>
+				<a href="COG-MEDIA.html">Media</a>
+				<a href="MEMBERS.HTML" aria-current="page">Members</a>
+			</nav>
+		</div>
+	</header>
+
+	<main class="container">
+		<section class="intro">
+			<span class="eyebrow">Our church family</span>
+			<h1>Meet our members</h1>
+			<p>Keep the COG San Juan family connected with one simple directory for names, ministries, and contact information.</p>
+		</section>
+
+		<section class="toolbar" aria-label="Member directory controls">
+			<label>Search members<input id="searchInput" type="search" placeholder="Search by name, ministry, or phone"></label>
+			<label>Ministry<select id="ministryFilter"><option value="all">All ministries</option></select></label>
+			<label>Status<select id="statusFilter"><option value="all">All statuses</option><option value="Active">Active</option><option value="Visiting">Visiting</option></select></label>
+			<button class="button" id="addMemberButton" type="button">+ Add member</button>
+		</section>
+
+		<div class="directory-head">
+			<h2>Church directory</h2>
+			<span class="count" id="memberCount">0 members</span>
+		</div>
+		<section class="directory-section" aria-labelledby="ministersHeading">
+			<div class="section-heading">
+				<h2 id="ministersHeading">Ministers</h2>
+				<span class="count" id="ministerCount">0 ministers</span>
+			</div>
+			<div class="member-grid" id="ministerGrid" aria-live="polite"></div>
+		</section>
+		<section class="directory-section" aria-labelledby="membersHeading">
+			<div class="section-heading">
+				<h2 id="membersHeading">Members</h2>
+				<span class="count" id="regularMemberCount">0 members</span>
+			</div>
+			<div class="member-grid" id="memberGrid" aria-live="polite"></div>
+		</section>
+		<p class="privacy-note">Please only publish contact details with each member's permission. The records on this page are stored in this browser's local storage.</p>
+	</main>
+
+	<dialog id="memberDialog">
+		<form class="dialog-content" id="memberForm">
+			<h2 id="dialogTitle">Add a member</h2>
+			<p class="dialog-message" id="dialogMessage" aria-live="polite"></p>
+			<div class="form-grid">
+				<label>Full name<input name="name" required placeholder="Full name"></label>
+				<label>Role<select name="role" required><option value="MEMBER">MEMBER</option><option value="PASTOR">PASTOR</option></select></label>
+				<label>Ministry<input name="ministry" required placeholder="Worship Ministry"></label>
+				<label>Phone<input name="phone" placeholder="+63 ..."></label>
+				<label>Birthday<input name="birthday" type="date"></label>
+				<label>Status<select name="status"><option>Active</option><option>Visiting</option></select></label>
+				<label class="picture-field" id="pictureField">Picture<input name="pictureFile" id="pictureFile" type="file" accept="image/*"><img class="picture-preview" id="picturePreview" alt="Selected member picture preview"></label>
+			</div>
+			<div class="dialog-actions">
+				<button class="button cancel" id="cancelButton" type="button">Cancel</button>
+				<button class="button" id="saveMemberButton" type="submit">Save member</button>
+			</div>
+		</form>
+	</dialog>
+	<div class="floating-clock" aria-live="polite">
+		<strong id="floatingClockTime">--:--:--</strong>
+		<span id="floatingClockDate">Loading time...</span>
+	</div>
+
+	<script>
+		function updateFloatingClock() {
+			const now = new Date();
+			const time = document.getElementById('floatingClockTime');
+			const date = document.getElementById('floatingClockDate');
+			if (time) time.textContent = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+			if (date) date.textContent = now.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+		}
+		updateFloatingClock();
+		setInterval(updateFloatingClock, 1000);
+
+		const starterMembers = [
+			{ name: 'Daniel Reyes', role: 'PASTOR', ministry: 'Leadership', phone: '+63 917 000 0001', birthday: 'January 14', status: 'Active' },
+			{ name: 'Maria Santos', role: 'MEMBER', ministry: 'Worship Ministry', phone: '+63 917 000 0002', birthday: 'March 08', status: 'Active' },
+			{ name: 'Joshua Garcia', role: 'MEMBER', ministry: 'Youth Ministry', phone: '+63 917 000 0003', birthday: 'June 21', status: 'Active' },
+			{ name: 'Ruth Villanueva', role: 'MEMBER', ministry: 'Prayer Ministry', phone: '+63 917 000 0004', birthday: 'September 12', status: 'Visiting' },
+			{ name: 'Samuel Cruz', role: 'MEMBER', ministry: 'Media Ministry', phone: '+63 917 000 0005', birthday: 'November 03', status: 'Active' },
+			{ name: 'Esther Mendoza', role: 'MEMBER', ministry: 'Children Ministry', phone: '+63 917 000 0006', birthday: 'December 18', status: 'Active' }
+		];
+		const storageKey = 'cog-san-juan-members';
+		const ministerGrid = document.getElementById('ministerGrid');
+		const memberGrid = document.getElementById('memberGrid');
+		const memberCount = document.getElementById('memberCount');
+		const ministerCount = document.getElementById('ministerCount');
+		const regularMemberCount = document.getElementById('regularMemberCount');
+		const searchInput = document.getElementById('searchInput');
+		const ministryFilter = document.getElementById('ministryFilter');
+		const statusFilter = document.getElementById('statusFilter');
+		const memberDialog = document.getElementById('memberDialog');
+		const memberForm = document.getElementById('memberForm');
+		const dialogTitle = document.getElementById('dialogTitle');
+		const dialogMessage = document.getElementById('dialogMessage');
+		const saveMemberButton = document.getElementById('saveMemberButton');
+		const pictureField = document.getElementById('pictureField');
+		const pictureFile = document.getElementById('pictureFile');
+		const picturePreview = document.getElementById('picturePreview');
+		let editingMemberIndex = null;
+		let selectedPicture = null;
+		let members = JSON.parse(localStorage.getItem(storageKey) || 'null') || starterMembers;
+		members = members.map(member => {
+			const role = ['CHURCH LEADER', 'CHAIRMAN'].includes(member.role?.toUpperCase()) ? 'PASTOR' : member.role;
+			return { ...member, role, picture: role === 'PASTOR' ? '' : (member.picture || '') };
+		});
+
+		function initials(name) {
+			return name.split(' ').slice(0, 2).map(part => part[0]).join('').toUpperCase();
+		}
+
+		function populateMinistries() {
+			const ministries = [...new Set(members.map(member => member.ministry))].sort();
+			ministryFilter.innerHTML = '<option value="all">All ministries</option>';
+			ministries.forEach(ministry => {
+				const option = document.createElement('option');
+				option.value = ministry;
+				option.textContent = ministry;
+				ministryFilter.appendChild(option);
+			});
+		}
+
+		function isMinister(member) {
+			return /pastor|minister|leader|bishop|elder|deacon|reverend/i.test(`${member.role} ${member.ministry}`);
+		}
+
+		function syncPictureField() {
+			const isPastor = memberForm.elements.role.value === 'PASTOR';
+			pictureField.hidden = isPastor;
+			if (isPastor) {
+				pictureFile.value = '';
+				selectedPicture = null;
+				picturePreview.removeAttribute('src');
+				picturePreview.classList.remove('visible');
+			}
+		}
+
+		function renderGroup(group, grid, emptyMessage) {
+			grid.innerHTML = '';
+			if (!group.length) {
+				grid.innerHTML = `<p class="empty">${emptyMessage}</p>`;
+				return;
+			}
+			group.forEach((member, index) => {
+				const card = document.createElement('article');
+				card.className = 'member-card';
+				card.style.animationDelay = `${index * 45}ms`;
+				card.innerHTML = `
+					<div class="avatar" aria-hidden="true">${member.picture ? `<img src="${member.picture}" alt="">` : initials(member.name)}</div>
+					<h3></h3>
+					<p class="role"></p>
+					<dl class="details">
+						<div><dt>Ministry</dt><dd></dd></div>
+						<div><dt>Phone</dt><dd></dd></div>
+						<div><dt>Birthday</dt><dd></dd></div>
+						<div><dt>Status</dt><dd><span class="status"></span></dd></div>
+					</dl>
+					<button class="edit-member-button" type="button">Edit member</button>`;
+				const fields = card.querySelectorAll('h3, .role, .details dd');
+				fields[0].textContent = member.name;
+				fields[1].textContent = member.role;
+				fields[2].textContent = member.ministry;
+				fields[3].textContent = member.phone || 'Not provided';
+				fields[4].textContent = member.birthday || 'Not provided';
+				fields[5].textContent = member.status;
+				card.querySelector('.edit-member-button').addEventListener('click', () => openMemberDialog(members.indexOf(member)));
+				grid.appendChild(card);
+			});
+		}
+
+		function openMemberDialog(memberIndex = null) {
+			editingMemberIndex = memberIndex;
+			selectedPicture = null;
+			memberForm.reset();
+			dialogMessage.textContent = '';
+			dialogMessage.classList.remove('error');
+			picturePreview.removeAttribute('src');
+			picturePreview.classList.remove('visible');
+			if (memberIndex === null) {
+				dialogTitle.textContent = 'Add a member';
+				saveMemberButton.textContent = 'Save member';
+				syncPictureField();
+				memberDialog.showModal();
+				return;
+			}
+			const member = members[memberIndex];
+			memberForm.elements.name.value = member.name;
+			memberForm.elements.ministry.value = member.ministry;
+			memberForm.elements.phone.value = member.phone || '';
+			memberForm.elements.birthday.value = /^\d{4}-\d{2}-\d{2}$/.test(member.birthday || '') ? member.birthday : '';
+			memberForm.elements.status.value = member.status;
+			if (member.picture) {
+				picturePreview.src = member.picture;
+				picturePreview.classList.add('visible');
+			}
+			if (![...memberForm.elements.role.options].some(option => option.value === member.role)) {
+				const legacyRole = new Option(member.role, member.role);
+				memberForm.elements.role.add(legacyRole, 0);
+			}
+			memberForm.elements.role.value = member.role;
+			syncPictureField();
+			dialogTitle.textContent = 'Edit member';
+			saveMemberButton.textContent = 'Update member';
+			memberDialog.showModal();
+		}
+
+		function renderMembers() {
+			const query = searchInput.value.trim().toLowerCase();
+			const filtered = members.filter(member => {
+				const searchable = `${member.name} ${member.role} ${member.ministry} ${member.phone}`.toLowerCase();
+				return searchable.includes(query)
+					&& (ministryFilter.value === 'all' || member.ministry === ministryFilter.value)
+					&& (statusFilter.value === 'all' || member.status === statusFilter.value);
+			});
+			const ministers = filtered.filter(isMinister);
+			const regularMembers = filtered.filter(member => !isMinister(member));
+			memberCount.textContent = `${filtered.length} ${filtered.length === 1 ? 'person' : 'people'}`;
+			ministerCount.textContent = `${ministers.length} ${ministers.length === 1 ? 'minister' : 'ministers'}`;
+			regularMemberCount.textContent = `${regularMembers.length} ${regularMembers.length === 1 ? 'member' : 'members'}`;
+			renderGroup(ministers, ministerGrid, 'No ministers match those filters.');
+			renderGroup(regularMembers, memberGrid, 'No members match those filters.');
+		}
+
+		function saveMembers() {
+			try {
+				localStorage.setItem(storageKey, JSON.stringify(members));
+				return true;
+			} catch {
+				return false;
+			}
+		}
+
+		function closeMemberDialog() {
+			memberForm.reset();
+			editingMemberIndex = null;
+			selectedPicture = null;
+			picturePreview.removeAttribute('src');
+			picturePreview.classList.remove('visible');
+			memberDialog.close();
+		}
+
+		document.getElementById('addMemberButton').addEventListener('click', () => openMemberDialog());
+		document.getElementById('cancelButton').addEventListener('click', closeMemberDialog);
+		memberForm.elements.role.addEventListener('change', syncPictureField);
+		pictureFile.addEventListener('change', () => {
+			const file = pictureFile.files[0];
+			if (!file) {
+				selectedPicture = null;
+				return;
+			}
+			const reader = new FileReader();
+			reader.addEventListener('load', () => {
+				selectedPicture = reader.result;
+				picturePreview.src = selectedPicture;
+				picturePreview.classList.add('visible');
+			});
+			reader.readAsDataURL(file);
+		});
+		[searchInput, ministryFilter, statusFilter].forEach(control => control.addEventListener('input', renderMembers));
+		memberForm.addEventListener('submit', async event => {
+			event.preventDefault();
+			const data = new FormData(memberForm);
+			const memberData = Object.fromEntries(data.entries());
+			delete memberData.pictureFile;
+			memberData.picture = memberData.role === 'PASTOR'
+				? ''
+				: (selectedPicture || (editingMemberIndex === null ? '' : members[editingMemberIndex].picture || ''));
+			const previousMembers = [...members];
+			if (editingMemberIndex === null) {
+				members.push(memberData);
+			} else {
+				members[editingMemberIndex] = memberData;
+			}
+			if (!saveMembers()) {
+				members = previousMembers;
+				dialogMessage.textContent = 'Could not save this update. The picture may be too large for browser storage.';
+				dialogMessage.classList.add('error');
+				return;
+			}
+			populateMinistries();
+			renderMembers();
+			dialogMessage.textContent = editingMemberIndex === null ? 'Member added successfully.' : 'Member updated successfully.';
+			setTimeout(closeMemberDialog, 700);
+		});
+
+		saveMembers();
+		populateMinistries();
+		renderMembers();
+	</script>
+	<script src="COG-SHARED.js"></script>
+</body>
+</html>
